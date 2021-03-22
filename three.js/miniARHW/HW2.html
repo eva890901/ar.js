@@ -153,7 +153,7 @@ function addMarkerHiro(){
 	markerRoot.add(group);
 	var cylinder = new THREE.Mesh( new THREE.CylinderGeometry( 0, 0.2, 0.5, 32 ), new THREE.MeshBasicMaterial( {color: 0xffffff} ) );
 	markerRoot.add (cylinder);
-	cylinder.position.set(-2.2,0,0.8);
+	cylinder.position.set(-2.3,0,0.1);
 	cylinder.rotation.z = -Math.PI/2;
 
 
@@ -173,21 +173,18 @@ function clamp (x, xLo, xHi) {
 function rotating(){
 	var Angle = (angle%(Math.PI*2));
 
-	if(omega == 0 && rotate == false){		
-		if(Angle >= 0 && Angle < Math.PI*2/3){
-			$('#text').css ('color', 'red'); 
-			$('#text').text('Red');
-		}
-		else if(Angle >= Math.PI*2/3 && Angle < Math.PI*4/3){
-			$('#text').css ('color', 'blue');
+		if(Angle >= Math.PI/2 && Angle < Math.PI*7/6){
+			$('#text').css ('color', 'Blue'); 
 			$('#text').text('Blue');
 		}
-		else if(Angle >= Math.PI*4/3 && Angle < Math.PI*2){
-			$('#text').css ('color', 'green');
-			$('#text').text('green');  
+		else if(Angle >= 7/6*Math.PI && Angle < Math.PI*11/6){
+			$('#text').css ('color', 'Green');
+			$('#text').text('Green');
 		}
-	}
-
+		else {
+			$('#text').css ('color', 'red');
+			$('#text').text('red');  
+		}
 
 }
 
@@ -197,19 +194,21 @@ function animate() {
 	
 	if( arToolkitSource.ready === false )	return
 	arToolkitContext.update( arToolkitSource.domElement )
-	var dt = 0.1;
-	var maxOmega = 10;
-	if (isActive) {
-		omega = omega + 5*dt;  
-	} 
-	else {
-		omega = omega - .15*dt;    
+	var dt = 0.05;
+	var maxOmega = 5;
+
+	if(isActive){
+		omega = omega+5*dt;
 	}
-	omega = clamp (omega, 0, maxOmega);
+	else{
+		omega = omega-0.15*dt;
+	}
+	omega = clamp(omega,0,maxOmega);
 
 	angle += omega*dt;
 	markerHiro.children[0].rotation.z = angle;
 	rotating();
+
 
 	
 	renderer.render (scene, camera);	
