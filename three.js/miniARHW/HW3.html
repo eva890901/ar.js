@@ -172,12 +172,18 @@ function init() {
 	group.add(circle2);
 	group.position.set(0, 0, 0);
 	markerRoot.add(group);
-	//var cir = 
-	var cylinder = new THREE.Mesh( new THREE.CylinderGeometry( 0, 0.05, 0.5, 32 ), new THREE.MeshBasicMaterial( {color: 0xffffff} ) );
-	markerRoot.add (cylinder);
-	//cylinder.position.set(-2.3,0,0.1);
-	cylinder.rotation.z = Math.PI/2;
-	//cylinder.rotation.x = -Math.PI/2;
+	group1 = new THREE.Group();
+	markerRoot.add (group1);
+	cylinder = new THREE.Mesh( new THREE.CylinderGeometry( 0, 0.05, 1, 32 ), new THREE.MeshBasicMaterial( {color: 0xffffff} ) );
+	group1.add( cylinder );
+	cylinder.position.z = -0.5;
+	cylinder.rotation.x = -Math.PI/2;
+	let geometry = new THREE.CircleGeometry( 0.05,32,0,2*Math.PI);
+	let material = new THREE.MeshBasicMaterial( { color: 0xffffff, side: THREE.DoubleSide} );
+	let circle = new THREE.Mesh( geometry, material );
+	circle.rotation.x = -Math.PI/2;
+	group1.add( circle );
+
 
 
 	
