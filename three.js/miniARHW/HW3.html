@@ -50,7 +50,7 @@ var _iOSDevice;
 var angle = 0;
 var group;
 var omega = 0;  
-var isAction = false;
+var isAction = false,state=1;
 var rotate;
 var pointer;
 init();
@@ -219,10 +219,14 @@ function init() {
 		onResize()
 	})
 	
-	if (_iOSDevice)
-    	window.addEventListener('touchstart', onTouchStart, false);
+	if (_iOSDevice){
+		window.addEventListener('touchstart', onTouchStart, false);
+		window.addEventListener('touchend', onTouchEnd, false);
+	}
+    	
 	else
 		window.addEventListener ('mousedown', onMouseDown, false);
+		window.addEventListener ('mouseup', onMouseUp, false);
 
 }
 
@@ -244,7 +248,7 @@ function animate() {
 		omega = omega+5*dt;
 	}
 	else{
-		omega = omega-0.15*dt;
+		omega = omega-dt;
 	}
 	omega = clamp(omega,0,maxOmega);
 
@@ -327,7 +331,7 @@ function pickCompute (ndcX, ndcY) {
 
 function onMouseUp (event) {
 	// do nothing yet ...
-	down = false;
+	isAction = false;
 }
 
 function onMouseDown (event) {
@@ -335,10 +339,10 @@ function onMouseDown (event) {
 	event.preventDefault();
 	let ndcX = (event.clientX / window.innerWidth) * 2 - 1;
 	let ndcY = -(event.clientY / window.innerHeight) * 2 + 1;
-
+	//state += 1;
 	pickCompute (ndcX, ndcY);	
-	
-	down = true;
+	if(state.length >0)
+		isAction = true;
 }	
 
 function onTouchStart (event) {
@@ -351,6 +355,17 @@ function onTouchStart (event) {
 		let ndcY = - ( event.touches[0].pageY / window.innerHeight ) * 2 + 1;
 	
 		pickCompute (ndcX, ndcY);		
+		
+	}	
+}
+
+function onTouchEnd (event) {
+	console.log ('in touch end')
+	event.preventDefault();
+   if (isAction) {
+        
+		isAction=!isAction;
+				
 		
 	}	
 }
