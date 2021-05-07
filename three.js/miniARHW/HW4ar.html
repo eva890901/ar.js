@@ -1,38 +1,72 @@
 <!DOCTYPE html>
 <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+
 <!-- three.js library -->
+<script src="https://code.jquery.com/jquery-2.1.4.min.js"></script>
 <script src='../examples/vendor/three.js/build/three.min.js'></script>
+<script src="../examples/vendor/three.js/examples/js/libs/stats.min.js"></script>
 <!-- ar.js -->
 <script src="../build/ar.js"></script>
 <script>THREEx.ArToolkitContext.baseURL = '../'</script>
 
 <body style='margin : 0px; overflow: hidden; font-family: Monospace;'>
-<div style='font-size:2em;position: absolute; top: 10px; width:100%; text-align: center; z-index: 1;'>
-	<a href="https://github.com/jeromeetienne/AR.js/" target="_blank">AR.js</a>
-	<br/>
-	Billboarded Explode (Hiro)
+<div style='position: absolute; top: 10px; width:100%; text-align: center; z-index: 1;'>
+<a href="https://github.com/jeromeetienne/AR.js/" target="_blank">AR.js</a>
+	 - three.js<br>
+Minimal Version<br><br>
+    <p id="text" style ="color:black ;font-size:25px">Target</p>
 </div>
-<script src="https://jyunming-chen.github.io/ar.js/three.js/myexamples/explode.js"></script>
+<script src="explode.js"></script>
 <script>
 
+class Button {
+	constructor (cx, cy, size, colorString = 'yellow', map = null){
+		this.centerX = cx;  // HUD-coord
+		this.centerY = cy;
+		this.size = size;  // circle radius
+		let material = new THREE.MeshBasicMaterial({color: colorString, transparent: true, opacity:0.7});
+		if (map) 
+		   material.map = map;
+		this.mesh = new THREE.Mesh (new THREE.CircleGeometry (size, 36), material );
+	    this.mesh.position.set (cx, cy, 0);
+	}
+	
+	setLocation (lx, ly) { // 2D-HUD 
+	    this.mesh.position.set (lx, ly, 0);
+	}
+	
+	d2To (v) { // 2-norm
+		return Math.sqrt ( (v[0]-this.centerX)*(v[0]-this.centerX) 
+				+ (v[1]-this.centerY)*(v[1]-this.centerY) );
+	}
+}
+        
+    
 // global variables
-var renderer, scene, camera;
+var renderer, scene;
+var camera, sceneHUD, cameraHUD;
 var arToolKitSource, arToolKitContext;
-
 var markerHiro;
+var markerRoot;
+var stats;
+var whRatio, halfW, halfH;
+var button1;
 
-var _iOSDevice;
-
+var group;
+var angle = 0;
+var down = false;
+var omega = 0;
+    
+var mouse = new THREE.Vector2();
+var raycaster = new THREE.Raycaster();
+var pickables = [];
+    
 init();
 animate();
 
 function init() {
-	// https://stackoverflow.com/questions/9038625/detect-if-device-is-ios?utm_medium=organic&utm_source=google_rich_qa&utm_campaign=google_rich_qa
-	let _iOSDevice = !!navigator.platform.match(/iPhone|iPod|iPad/);
 
-	console.log ('iOS: ' + _iOSDevice)
-
-
+    let _iOSDevice = !!navigator.platform.match(/iPhone|iPod|iPad/);
 	// init renderer
 	renderer	= new THREE.WebGLRenderer({
 		// antialias	: true,
@@ -46,33 +80,55 @@ function init() {
 	renderer.domElement.style.left = '0px'
 	document.body.appendChild( renderer.domElement );
 
-	
+    // for multi-pass rendering
+	renderer.autoClear = false;
+
+	// width/height ratio
+	whRatio = window.innerWidth/window.innerHeight;
+    
+	stats = new Stats();
+	document.body.appendChild( stats.dom );
+
 	// init scene and camera
 	scene	= new THREE.Scene();
 	
-	//////////////////////////////////////////////////////////////////////////////////
-	//		Initialize a basic camera
-	//////////////////////////////////////////////////////////////////////////////////
-
-	// Create a camera
+	// Create a BASIC camera
 	camera = new THREE.Camera();
 	scene.add(camera);
 
-	////////////////////////////////////////////////////////////////////////////////
+	sceneHUD = new THREE.Scene();
+	
+	halfH = 10;
+	halfW = halfH * whRatio;
+	
+	cameraHUD = new THREE.OrthographicCamera (-halfW,halfW, halfH,-halfH, -10,10);
+   
+    ///////////////////////////////////////////////////////
+	
+	let loader = new THREE.TextureLoader();
+	loader.setCrossOrigin(''); // 重要！
+	loader.load(
+    	// resource URL
+    	'https://i.imgur.com/3MRWKzX.png',
+
+    	// Function when resource is loaded
+    	function(texture) {
+      		console.log ('texture loaded ...')
+			// texture load完，再建button
+			var buttonSize = halfH/3; // radius
+			button1 = new Button (halfW/2, -halfH/2, buttonSize, 'white', texture); 
+			sceneHUD.add (button1.mesh);
+    	},
+
+  	);
+  	
+    ////////////////////////////////////////////////////////////////////////////////
 	//          handle arToolkitSource
 	////////////////////////////////////////////////////////////////////////////////
 
 	arToolkitSource = new THREEx.ArToolkitSource({
 		// to read from the webcam 
 		sourceType : 'webcam',
-
-		// to read from an image
-		// sourceType : 'image',
-		// sourceUrl : THREEx.ArToolkitContext.baseURL + '../data/images/img.jpg',		
-
-		// to read from a video
-		// sourceType : 'video',
-		// sourceUrl : THREEx.ArToolkitContext.baseURL + '../data/videos/headtracking.mp4',		
 	})
 
 	arToolkitSource.init(function onReady(){
@@ -84,13 +140,36 @@ function init() {
 		onResize()
 	})
 	function onResize(){
-		arToolkitSource.onResize()	
-		arToolkitSource.copySizeTo(renderer.domElement)	
-		if( arToolkitContext.arController !== null ){
-			arToolkitSource.copySizeTo(arToolkitContext.arController.canvas)	
-		}	
+		arToolkitSource.onResizeElement()	
+	arToolkitSource.copyElementSizeTo(renderer.domElement)	
+	if( arToolkitContext.arController !== null ){
+		arToolkitSource.copyElementSizeTo(arToolkitContext.arController.canvas)	
+	}	
+	
+	//$('#ratio').text ('resize: width: ' + window.innerWidth + ' height: ' + window.innerHeight)
+	// use 'ratio' to display down/up
+	
+	whRatio = window.innerWidth/window.innerHeight;
+		console.log ('[onResize] width: ' + renderer.domElement.width)	
+		console.log ('[onResize] height: ' + renderer.domElement.height)	
+		console.log ('[onResize] whRatio: ' + whRatio)	
+	
+	 halfW = halfH * whRatio;
+	cameraHUD.left = -halfW;
+	cameraHUD.right = halfW;
+	cameraHUD.top = halfH;
+	cameraHUD.bottom = -halfH;
+	cameraHUD.updateProjectionMatrix();	
 	}
-	////////////////////////////////////////////////////////////////////////////////
+	if (_iOSDevice) {
+    	window.addEventListener('touchstart', onTouchStart, false);
+        window.addEventListener('touchend', onTouchEnd, false);
+    	// touchend ... use the same callback as mouseup
+	} else {
+		window.addEventListener ('mousedown', onMouseDown, false);
+		window.addEventListener ('mouseup', onMouseUp, false);
+    }
+    ////////////////////////////////////////////////////////////////////////////////
 	//          initialize arToolkitContext
 	////////////////////////////////////////////////////////////////////////////////
 	
@@ -106,46 +185,144 @@ function init() {
 		// copy projection matrix to camera
 		camera.projectionMatrix.copy( arToolkitContext.getProjectionMatrix() );
 	})
-	
+
 	markerHiro = addMarkerHiro();
-	scene.add (markerHiro); 
-		
-	// to trigger explosion
-	window.addEventListener ('mousedown', doMouseDown, false);
-	// initialize explosion sprite
-	initSprite(markerHiro);
-		
+	scene.add (markerHiro);
+    initSprite(markerHiro);
 }
+	
+function addMarkerHiro(){
+	let markerRoot = new THREE.Group()
 
-function doMouseDown (e) {
-	if (e.button === 0) {
-		setTimeout (spriteAnimate, 0);
-	}
-}
-
-function addMarkerHiro () {
-	let markerRootHiro = new THREE.Group();
-	var artoolkitMarker = new THREEx.ArMarkerControls(arToolkitContext, markerRootHiro, {
+	var artoolkitMarker = new THREEx.ArMarkerControls(arToolkitContext, markerRoot, {
 		type : 'pattern',
-		 patternUrl : THREEx.ArToolkitContext.baseURL + '../data/data/patt.hiro'
+		patternUrl : THREEx.ArToolkitContext.baseURL + '../data/data/bombMarker.patt'
 	})
+
+  /*// add a torus knot & a transparent box	
+	var geometry	= new THREE.TorusKnotGeometry(0.3,0.1,64,16);
+	var material	= new THREE.MeshNormalMaterial();
+	var mesh	= new THREE.Mesh( geometry, material );
+	mesh.position.y	= 0.5
+	markerRoot.add (mesh);
 	
-	// nothing to added here (for now)	
-	return markerRootHiro;
+	mesh = new THREE.Mesh (new THREE.BoxGeometry(1,1,1), 
+				new THREE.MeshNormalMaterial({transparent:true, opacity:0.3}));
+	mesh.position.y	= 0.5
+	markerRoot.add (mesh); */
+	let loader = new THREE.TextureLoader();
+	loader.setCrossOrigin('')
+	let texture = loader.load( 'https://i.imgur.com/Pd8xXaM.png' );
+	
+	let material = new THREE.MeshBasicMaterial( { 
+		map: texture,
+		transparent: true,
+		side: THREE.DoubleSide
+		} );
+	let geometry	= new THREE.PlaneGeometry(1,1);
+	let mesh	= new THREE.Mesh( geometry, material );
+	//mesh.position.y	= geometry.parameters.height/2;
+    mesh.rotation.x = Math.PI/2;
+	let target = new THREE.Object3D();
+	target.add (mesh);
+	markerRoot.add (target);
+	
+	/// add gridhelper
+	/*var gridXZ = new THREE.GridHelper(1,10);
+    markerRoot.add( gridXZ );*/
+	return markerRoot;
 }
+    
 
-
+    
 function animate() {
-  requestAnimationFrame (animate);
-	
-  if( arToolkitSource.ready === false )	return
-  arToolkitContext.update( arToolkitSource.domElement )
+	requestAnimationFrame (animate);
+	stats.update();
 
-  renderer.render (scene, camera);
-  //let msg = baseS + ', ' + baseT;
-  //console.log (msg);
+    
+	if( arToolkitSource.ready === false )	return
+	arToolkitContext.update( arToolkitSource.domElement )
+    
+    
+    renderer.clear();
+	renderer.render (scene, camera);
+    
+    
+    button1.mesh.material.visible = markerHiro.visible;
+    
+    renderer.render (sceneHUD, cameraHUD);
+    
+    let localCamera = markerHiro.worldToLocal (new THREE.Vector3(0,0,0))
+	// CYLINDRICAL billboard:
+	localCamera.y = 0;
+	
+	// to rotate (0,0,1) to localCamera [markerCoord]
+	let point = new THREE.Vector3(0,0,1);
+	let angle = point.angleTo (localCamera);
+	let axis = new THREE.Vector3();
+	axis.crossVectors(point, localCamera).normalize(); // normalization is IMPORTANT!
+	let target = markerHiro.children[0];
+	target.quaternion.setFromAxisAngle (axis, angle);
+    //renderer.render (scene, camera);
 		
 }
+function pickCompute (ndcX, ndcY) {
 
-</script>
-</body>
+	// use 2D algorithm, in HUD-coord
+	let HUD_coord = [halfW*ndcX, halfH*ndcY]
+		
+	let dist = button1.d2To (HUD_coord);	
+	let printStr = [ dist.toFixed(2), HUD_coord[0].toFixed(2), HUD_coord[1].toFixed(2) ];
+	
+	$('#touch').text ( `[${printStr[0]}]: (${printStr[1]}, ${printStr[2]})`);
+	
+	if (dist < button1.size) {  // distance VS. radius
+        setTimeout (spriteAnimate, 0);
+		console.log ('picked')
+        
+	} else {
+        
+		console.log ('no hit')
+	}
+
+}
+
+function onMouseUp (event) {
+	// do nothing yet ...
+}
+
+function onMouseDown (event) {
+	console.log ('in mouse down')
+	event.preventDefault();
+	let ndcX = (event.clientX / window.innerWidth) * 2 - 1;
+	let ndcY = -(event.clientY / window.innerHeight) * 2 + 1;
+
+	pickCompute (ndcX, ndcY);
+    
+
+}	
+
+function onTouchStart (event) {
+	console.log ('in touch start')
+
+   if (event.touches.length == 1) {
+        
+		event.preventDefault();
+		let ndcX = ( event.touches[0].pageX / window.innerWidth ) * 2 - 1;
+		let ndcY = - ( event.touches[0].pageY / window.innerHeight ) * 2 + 1;
+	
+		pickCompute (ndcX, ndcY);		
+		
+	}	
+}
+    
+    
+function onTouchEnd (event) {
+    console.log ('in touch end')
+	event.preventDefault();
+
+
+}
+    
+
+</script></body>
